@@ -5,15 +5,5 @@
       "schedule": "0 13 * * *"
     }
   ],
-  "headers": [
-    {
-      "source": "/api/cron/send-newsletters",
-      "headers": [
-        {
-          "key": "Authorization",
-          "value": "Bearer ${CRON_SECRET}"
-        }
-      ]
-    }
-  ]
+  "headers": []
 }

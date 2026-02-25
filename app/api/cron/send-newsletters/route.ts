@@ -6,8 +6,9 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   const authHeader = request.headers.get("authorization") ?? ""
   const token = authHeader.replace("Bearer ", "")
+  const isVercelCron = request.headers.get("x-vercel-cron") === "1"
 
-  if (!secret || token !== secret) {
+  if (!isVercelCron && (!secret || token !== secret)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 })
   }
 
