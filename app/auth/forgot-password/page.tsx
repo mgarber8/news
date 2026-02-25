@@ -1,68 +1,58 @@
 "use client"
 
-import type React from "react"
-import { supabase } from "@/lib/supabase/client"
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase/client"
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const router = useRouter()
+  const [success, setSuccess] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     setIsLoading(true)
     setError("")
+    setSuccess("")
 
-    const formData = new FormData(e.currentTarget)
-    const email = String(formData.get("email") || "")
-    const password = String(formData.get("password") || "")
+    const redirectTo = `${window.location.origin}/auth/reset-password`
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      setError(error.message)
+    if (resetError) {
+      setError(resetError.message)
       setIsLoading(false)
       return
     }
 
+    setSuccess("Check your email for a password reset link.")
     setIsLoading(false)
-    router.push("/dashboard")
   }
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Welcome Back</CardTitle>
-          <CardDescription>Sign in to your newsletter account</CardDescription>
+          <CardTitle>Reset your password</CardTitle>
+          <CardDescription>Enter your email and we’ll send a reset link.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/auth/forgot-password" className="text-sm text-blue-600 hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-              <Input id="password" name="password" type="password" required />
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
             </div>
 
             {error && (
@@ -70,17 +60,21 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+            {success && (
+              <Alert>
+                <AlertDescription>{success}</AlertDescription>
+              </Alert>
+            )}
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign In
+              Send Reset Link
             </Button>
           </form>
 
           <div className="mt-4 text-center text-sm">
-            {"Don't have an account? "}
-            <Link href="/auth/signup" className="text-blue-600 hover:underline">
-              Sign up
+            <Link href="/auth/login" className="text-blue-600 hover:underline">
+              Back to sign in
             </Link>
           </div>
         </CardContent>

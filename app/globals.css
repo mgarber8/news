@@ -90,3 +90,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes mail-float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.mail-float {
+  animation: mail-float 6s ease-in-out infinite;
+}

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase/client"
 
 export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -22,11 +23,11 @@ export default function SignUpPage() {
     setError("")
 
     const formData = new FormData(e.currentTarget)
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-    const confirmPassword = formData.get("confirmPassword") as string
-    const firstName = formData.get("firstName") as string
-    const lastName = formData.get("lastName") as string
+    const email = String(formData.get("email") || "")
+    const password = String(formData.get("password") || "")
+    const confirmPassword = String(formData.get("confirmPassword") || "")
+    const firstName = String(formData.get("firstName") || "")
+    const lastName = String(formData.get("lastName") || "")
 
     if (password !== confirmPassword) {
       setError("Passwords do not match")
@@ -34,11 +35,25 @@ export default function SignUpPage() {
       return
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+        },
+      },
+    })
+
+    if (error) {
+      setError(error.message)
       setIsLoading(false)
-      setSuccess(true)
-    }, 1500)
+      return
+    }
+
+    setIsLoading(false)
+    setSuccess(true)
   }
 
   if (success) {

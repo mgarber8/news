@@ -1,0 +1,19 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/send-newsletters",
+      "schedule": "5 * * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/cron/send-newsletters",
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer ${CRON_SECRET}"
+        }
+      ]
+    }
+  ]
+}
