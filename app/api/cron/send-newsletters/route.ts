@@ -9,6 +9,8 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization") ?? ""
   const token = authHeader.replace("Bearer ", "")
   const isVercelCron = request.headers.get("x-vercel-cron") === "1"
+  const { searchParams } = new URL(request.url)
+  const debug = searchParams.get("debug") === "1"
 
   if (!isVercelCron && (!secret || token !== secret)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 })
@@ -62,7 +64,20 @@ export async function GET(request: Request) {
     const sendWeekStartKey = `${sendWeekStartValue.year}-${sendWeekStartValue.month}-${sendWeekStartValue.day}`
 
     if (now < lastCutoff) {
-      results.push({ id: newsletter.id, status: "skipped_before_cutoff" })
+      results.push({
+        id: newsletter.id,
+        status: "skipped_before_cutoff",
+        ...(debug
+          ? {
+              now: now.toISOString(),
+              lastCutoff: lastCutoff.toISOString(),
+              sendWeekStart: sendWeekStartKey,
+              cutoffTz: newsletter.cutoff_tz,
+              cutoffDay: newsletter.cutoff_day,
+              cutoffTime: newsletter.cutoff_time,
+            }
+          : {}),
+      })
       continue
     }
 
@@ -75,7 +90,17 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (existingIssue.data?.id) {
-      results.push({ id: newsletter.id, status: "already_sent" })
+      results.push({
+        id: newsletter.id,
+        status: "already_sent",
+        ...(debug
+          ? {
+              now: now.toISOString(),
+              lastCutoff: lastCutoff.toISOString(),
+              sendWeekStart: sendWeekStartKey,
+            }
+          : {}),
+      })
       continue
     }
 
@@ -104,7 +129,17 @@ export async function GET(request: Request) {
     }
 
     if (recipients.length === 0) {
-      results.push({ id: newsletter.id, status: "no_recipients" })
+      results.push({
+        id: newsletter.id,
+        status: "no_recipients",
+        ...(debug
+          ? {
+              now: now.toISOString(),
+              lastCutoff: lastCutoff.toISOString(),
+              sendWeekStart: sendWeekStartKey,
+            }
+          : {}),
+      })
       continue
     }
 
@@ -117,9 +152,29 @@ export async function GET(request: Request) {
         resendFrom,
         recipients,
       })
-      results.push({ id: newsletter.id, status: "sent" })
+      results.push({
+        id: newsletter.id,
+        status: "sent",
+        ...(debug
+          ? {
+              now: now.toISOString(),
+              lastCutoff: lastCutoff.toISOString(),
+              sendWeekStart: sendWeekStartKey,
+            }
+          : {}),
+      })
     } catch (error) {
-      results.push({ id: newsletter.id, status: "send_error" })
+      results.push({
+        id: newsletter.id,
+        status: "send_error",
+        ...(debug
+          ? {
+              now: now.toISOString(),
+              lastCutoff: lastCutoff.toISOString(),
+              sendWeekStart: sendWeekStartKey,
+            }
+          : {}),
+      })
     }
   }
 
