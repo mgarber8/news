@@ -113,6 +113,7 @@ export const computeCutoffWindow = (newsletter: NewsletterRow) => {
 
   return {
     weekStartValue: formatDateYmd(weekStart, newsletter.cutoff_tz),
+    lastCutoff: weekStart,
     editDeadline,
   }
 }

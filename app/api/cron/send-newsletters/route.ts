@@ -39,9 +39,29 @@ export async function GET(request: Request) {
   const now = new Date()
 
   for (const newsletter of newsletters ?? []) {
-    const { weekStartValue, editDeadline } = computeCutoffWindow(newsletter)
+    const { lastCutoff } = computeCutoffWindow(newsletter)
+    const sendWeekStart = new Date(lastCutoff.getTime())
+    sendWeekStart.setUTCDate(sendWeekStart.getUTCDate() - 7)
+    const sendWeekStartValue = new Intl.DateTimeFormat("en-US", {
+      timeZone: newsletter.cutoff_tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(sendWeekStart)
+      .reduce(
+        (acc, part) => {
+          if (part.type === "year") acc.year = part.value
+          if (part.type === "month") acc.month = part.value
+          if (part.type === "day") acc.day = part.value
+          return acc
+        },
+        { year: "", month: "", day: "" }
+      )
 
-    if (now < editDeadline) {
+    const sendWeekStartKey = `${sendWeekStartValue.year}-${sendWeekStartValue.month}-${sendWeekStartValue.day}`
+
+    if (now < lastCutoff) {
       results.push({ id: newsletter.id, status: "skipped_before_cutoff" })
       continue
     }
@@ -50,7 +70,7 @@ export async function GET(request: Request) {
       .from("issues")
       .select("id,status")
       .eq("newsletter_id", newsletter.id)
-      .eq("week_start", weekStartValue)
+      .eq("week_start", sendWeekStartKey)
       .eq("status", "sent")
       .maybeSingle()
 
@@ -92,7 +112,7 @@ export async function GET(request: Request) {
       await buildAndSendIssue({
         supabase,
         newsletter,
-        weekStartValue,
+        weekStartValue: sendWeekStartKey,
         resendKey,
         resendFrom,
         recipients,
