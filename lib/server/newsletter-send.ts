@@ -250,14 +250,19 @@ export const buildAndSendIssue = async (args: {
     html,
   }
 
-  const resendRes = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(emailPayload),
-  })
+  let resendRes: Response
+  try {
+    resendRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(emailPayload),
+    })
+  } catch (error) {
+    throw new Error(`Resend fetch failed: ${(error as Error).message}`)
+  }
 
   if (!resendRes.ok) {
     const errorText = await resendRes.text()

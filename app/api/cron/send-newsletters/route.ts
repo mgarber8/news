@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { buildAndSendIssue, computeCutoffWindow } from "@/lib/server/newsletter-send"
 
+export const runtime = "nodejs"
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   const authHeader = request.headers.get("authorization") ?? ""
