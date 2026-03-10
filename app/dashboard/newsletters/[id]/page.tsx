@@ -229,7 +229,6 @@ export default function NewsletterDashboardPage() {
 
   const handleDeleteQuestion = async (question: NewsletterQuestion) => {
     if (!newsletter || newsletter.owner_id !== authUserId) return
-    if (question.is_base) return
     setError("")
 
     const { error: deleteError } = await supabase.from("newsletter_questions").delete().eq("id", question.id)
@@ -409,16 +408,14 @@ export default function NewsletterDashboardPage() {
                             >
                               {question.is_active ? "On" : "Off"}
                             </Button>
-                            {!question.is_base && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteQuestion(question)}
-                              >
-                                Remove
-                              </Button>
-                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteQuestion(question)}
+                            >
+                              Remove
+                            </Button>
                           </div>
                         </div>
                       ))}
