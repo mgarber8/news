@@ -164,6 +164,7 @@ export async function GET(request: Request) {
           : {}),
       })
     } catch (error) {
+      const message = (error as Error).message
       results.push({
         id: newsletter.id,
         status: "send_error",
@@ -172,6 +173,7 @@ export async function GET(request: Request) {
               now: now.toISOString(),
               lastCutoff: lastCutoff.toISOString(),
               sendWeekStart: sendWeekStartKey,
+              error: message,
             }
           : {}),
       })
