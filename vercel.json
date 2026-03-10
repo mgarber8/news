@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/send-newsletters",
-      "schedule": "0 13 * * *"
+      "schedule": "0 12 * * *"
     }
   ],
   "headers": []
