@@ -164,7 +164,8 @@ export async function GET(request: Request) {
           : {}),
       })
     } catch (error) {
-      const message = (error as Error).message
+      const message =
+        error instanceof Error && error.message ? error.message : typeof error === "string" ? error : JSON.stringify(error)
       results.push({
         id: newsletter.id,
         status: "send_error",
@@ -173,7 +174,7 @@ export async function GET(request: Request) {
               now: now.toISOString(),
               lastCutoff: lastCutoff.toISOString(),
               sendWeekStart: sendWeekStartKey,
-              error: message,
+              error: message || "Unknown send error",
             }
           : {}),
       })
