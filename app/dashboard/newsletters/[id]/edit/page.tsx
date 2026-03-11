@@ -163,6 +163,7 @@ export default function NewsletterEditPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
   const [newsletter, setNewsletter] = useState<Newsletter | null>(null)
   const [submission, setSubmission] = useState<Submission | null>(null)
   const [questions, setQuestions] = useState<NewsletterQuestion[]>([])
@@ -302,6 +303,7 @@ export default function NewsletterEditPage() {
     if (!canEdit || !weekStartValue) return
     setIsSaving(true)
     setError("")
+    setSuccessMessage("")
 
     const { data: authData, error: authError } = await supabase.auth.getUser()
     if (authError || !authData?.user) {
@@ -410,6 +412,10 @@ export default function NewsletterEditPage() {
         : { id: savedSubmission.id, week_start: weekStartValue, ai_summary: aiSummary.trim() || null }
     )
     setIsSaving(false)
+    setSuccessMessage("Update saved. Returning to the newsletter dashboard...")
+    setTimeout(() => {
+      router.push(`/dashboard/newsletters/${newsletterId}`)
+    }, 800)
   }
 
   const handleDeletePhoto = async (photo: SubmissionPhoto) => {
@@ -639,6 +645,11 @@ export default function NewsletterEditPage() {
                 {error && (
                   <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                {successMessage && (
+                  <Alert>
+                    <AlertDescription>{successMessage}</AlertDescription>
                   </Alert>
                 )}
 

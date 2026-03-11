@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Clock, FileText, Loader2, PenTool, Users } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Clock, FileText, Loader2, PenTool, Users } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 
 type Newsletter = {
@@ -33,6 +33,107 @@ type NewsletterQuestion = {
   sort_order: number
 }
 
+const weekdayIndex: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+}
+
+const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+  })
+  const parts = formatter.formatToParts(date)
+  const offsetPart = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+0"
+  const match = offsetPart.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/)
+  if (!match) return 0
+  const hours = Number.parseInt(match[1], 10)
+  const minutes = match[2] ? Number.parseInt(match[2], 10) : 0
+  return hours * 60 + (hours >= 0 ? minutes : -minutes)
+}
+
+const makeZonedDate = (
+  { year, month, day, hour, minute, second }: { year: number; month: number; day: number; hour: number; minute: number; second: number },
+  timeZone: string
+) => {
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
+  const offset = getTimeZoneOffsetMinutes(utcDate, timeZone)
+  return new Date(utcDate.getTime() - offset * 60 * 1000)
+}
+
+const getZonedParts = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    weekday: "short",
+  })
+  const parts = formatter.formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    weekday: weekdayIndex[values.weekday] ?? 0,
+  }
+}
+
+const formatDateYmd = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+  const parts = formatter.formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+const parseCutoffTime = (timeValue: string) => {
+  const [hourRaw, minuteRaw = "0", secondRaw = "0"] = timeValue.split(":")
+  return {
+    hour: Number.parseInt(hourRaw, 10) || 0,
+    minute: Number.parseInt(minuteRaw, 10) || 0,
+    second: Number.parseInt(secondRaw, 10) || 0,
+  }
+}
+
+const computeWeekStartValue = (cutoffDay: number, cutoffTime: string, cutoffTz: string) => {
+  const now = new Date()
+  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, cutoffTz)
+  const cutoff = parseCutoffTime(cutoffTime)
+  const daysSinceCutoff = (weekday - cutoffDay + 7) % 7
+  let cutoffDate = makeZonedDate(
+    { year, month, day, hour: cutoff.hour, minute: cutoff.minute, second: cutoff.second },
+    cutoffTz
+  )
+  cutoffDate.setUTCDate(cutoffDate.getUTCDate() - daysSinceCutoff)
+
+  if (daysSinceCutoff === 0) {
+    const nowMinutes = hour * 60 + minute + second / 60
+    const cutoffMinutes = cutoff.hour * 60 + cutoff.minute + cutoff.second / 60
+    if (nowMinutes < cutoffMinutes) {
+      cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 7)
+    }
+  }
+
+  return formatDateYmd(cutoffDate, cutoffTz)
+}
+
 export default function NewsletterDashboardPage() {
   const params = useParams()
   const router = useRouter()
@@ -54,6 +155,8 @@ export default function NewsletterDashboardPage() {
   const [isSavingCutoff, setIsSavingCutoff] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sendSuccess, setSendSuccess] = useState("")
+  const [weekStartValue, setWeekStartValue] = useState("")
+  const [hasSubmission, setHasSubmission] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -83,6 +186,28 @@ export default function NewsletterDashboardPage() {
       setCutoffDay(newsletterRes.data.cutoff_day ?? 5)
       setCutoffTime((newsletterRes.data.cutoff_time ?? "00:00").slice(0, 5))
       setCutoffTz(newsletterRes.data.cutoff_tz ?? "America/New_York")
+      const computedWeekStart = computeWeekStartValue(
+        newsletterRes.data.cutoff_day ?? 5,
+        newsletterRes.data.cutoff_time ?? "00:00",
+        newsletterRes.data.cutoff_tz ?? "America/New_York"
+      )
+      setWeekStartValue(computedWeekStart)
+
+      const submissionRes = await supabase
+        .from("submissions")
+        .select("id")
+        .eq("newsletter_id", newsletterId)
+        .eq("user_id", authData.user.id)
+        .eq("week_start", computedWeekStart)
+        .maybeSingle()
+
+      if (submissionRes.error) {
+        setError(submissionRes.error.message)
+        setIsLoading(false)
+        return
+      }
+
+      setHasSubmission(Boolean(submissionRes.data))
 
       const questionRes = await supabase
         .from("newsletter_questions")
@@ -341,6 +466,16 @@ export default function NewsletterDashboardPage() {
                 <CardDescription>Submit your update for this week.</CardDescription>
               </CardHeader>
               <CardContent>
+                {weekStartValue && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+                    <CheckCircle2 className={hasSubmission ? "h-4 w-4 text-green-600" : "h-4 w-4 text-gray-300"} />
+                    <span>
+                      {hasSubmission
+                        ? `Saved for week of ${weekStartValue}.`
+                        : `No update saved yet for week of ${weekStartValue}.`}
+                    </span>
+                  </div>
+                )}
                 <Button asChild>
                   <Link href={`/dashboard/newsletters/${newsletter.id}/edit`}>
                     <PenTool className="mr-2 h-4 w-4" />
