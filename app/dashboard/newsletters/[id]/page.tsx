@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, CheckCircle2, Clock, FileText, Loader2, PenTool, Users } from "lucide-react"
@@ -16,6 +15,7 @@ type Newsletter = {
   title: string
   description: string | null
   owner_id: string | null
+  current_week_start: string | null
 }
 
 type MemberRow = {
@@ -103,6 +103,9 @@ const formatDateYmd = (date: Date, timeZone: string) => {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+const DEFAULT_CUTOFF_TIME = "00:00"
+const DEFAULT_CUTOFF_TZ = "America/Los_Angeles"
+
 const parseCutoffTime = (timeValue: string) => {
   const [hourRaw, minuteRaw = "0", secondRaw = "0"] = timeValue.split(":")
   return {
@@ -112,14 +115,14 @@ const parseCutoffTime = (timeValue: string) => {
   }
 }
 
-const computeWeekStartValue = (cutoffDay: number, cutoffTime: string, cutoffTz: string) => {
+const computeWeekStartValue = (cutoffDay: number) => {
   const now = new Date()
-  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, cutoffTz)
-  const cutoff = parseCutoffTime(cutoffTime)
+  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, DEFAULT_CUTOFF_TZ)
+  const cutoff = parseCutoffTime(DEFAULT_CUTOFF_TIME)
   const daysSinceCutoff = (weekday - cutoffDay + 7) % 7
   let cutoffDate = makeZonedDate(
     { year, month, day, hour: cutoff.hour, minute: cutoff.minute, second: cutoff.second },
-    cutoffTz
+    DEFAULT_CUTOFF_TZ
   )
   cutoffDate.setUTCDate(cutoffDate.getUTCDate() - daysSinceCutoff)
 
@@ -131,7 +134,7 @@ const computeWeekStartValue = (cutoffDay: number, cutoffTime: string, cutoffTz: 
     }
   }
 
-  return formatDateYmd(cutoffDate, cutoffTz)
+  return formatDateYmd(cutoffDate, DEFAULT_CUTOFF_TZ)
 }
 
 export default function NewsletterDashboardPage() {
@@ -150,8 +153,6 @@ export default function NewsletterDashboardPage() {
   const [isSavingQuestion, setIsSavingQuestion] = useState(false)
   const [isRemovingMemberId, setIsRemovingMemberId] = useState<string | null>(null)
   const [cutoffDay, setCutoffDay] = useState(5)
-  const [cutoffTime, setCutoffTime] = useState("00:00")
-  const [cutoffTz, setCutoffTz] = useState("America/New_York")
   const [isSavingCutoff, setIsSavingCutoff] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sendSuccess, setSendSuccess] = useState("")
@@ -172,7 +173,7 @@ export default function NewsletterDashboardPage() {
 
       const newsletterRes = await supabase
         .from("newsletters")
-        .select("id,title,description,owner_id,cutoff_day,cutoff_time,cutoff_tz")
+        .select("id,title,description,owner_id,cutoff_day,cutoff_time,cutoff_tz,current_week_start")
         .eq("id", newsletterId)
         .single()
 
@@ -184,13 +185,8 @@ export default function NewsletterDashboardPage() {
 
       setNewsletter(newsletterRes.data)
       setCutoffDay(newsletterRes.data.cutoff_day ?? 5)
-      setCutoffTime((newsletterRes.data.cutoff_time ?? "00:00").slice(0, 5))
-      setCutoffTz(newsletterRes.data.cutoff_tz ?? "America/New_York")
-      const computedWeekStart = computeWeekStartValue(
-        newsletterRes.data.cutoff_day ?? 5,
-        newsletterRes.data.cutoff_time ?? "00:00",
-        newsletterRes.data.cutoff_tz ?? "America/New_York"
-      )
+      const computedWeekStart =
+        newsletterRes.data.current_week_start ?? computeWeekStartValue(newsletterRes.data.cutoff_day ?? 5)
       setWeekStartValue(computedWeekStart)
 
       const submissionRes = await supabase
@@ -375,8 +371,8 @@ export default function NewsletterDashboardPage() {
       .from("newsletters")
       .update({
         cutoff_day: cutoffDay,
-        cutoff_time: cutoffTime,
-        cutoff_tz: cutoffTz,
+        cutoff_time: "00:00:00",
+        cutoff_tz: DEFAULT_CUTOFF_TZ,
       })
       .eq("id", newsletter.id)
 
@@ -386,6 +382,10 @@ export default function NewsletterDashboardPage() {
       return
     }
 
+    setWeekStartValue((prev) =>
+      newsletter?.current_week_start ? newsletter.current_week_start : computeWeekStartValue(cutoffDay)
+    )
+    setHasSubmission(false)
     setIsSavingCutoff(false)
   }
 
@@ -595,7 +595,7 @@ export default function NewsletterDashboardPage() {
                     <Clock className="mr-2 h-5 w-5" />
                     Cutoff Settings
                   </CardTitle>
-                  <CardDescription>Control the weekly deadline (ET by default).</CardDescription>
+                <CardDescription>Cutoff is midnight Pacific time.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleCutoffSave} className="space-y-4">
@@ -614,30 +614,6 @@ export default function NewsletterDashboardPage() {
                         <option value={4}>Thursday</option>
                         <option value={5}>Friday</option>
                         <option value={6}>Saturday</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cutoffTime">Cutoff Time</Label>
-                      <Input
-                        id="cutoffTime"
-                        type="time"
-                        value={cutoffTime}
-                        onChange={(event) => setCutoffTime(event.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cutoffTz">Timezone</Label>
-                      <select
-                        id="cutoffTz"
-                        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                        value={cutoffTz}
-                        onChange={(event) => setCutoffTz(event.target.value)}
-                      >
-                        <option value="America/New_York">America/New_York (ET)</option>
-                        <option value="America/Chicago">America/Chicago (CT)</option>
-                        <option value="America/Denver">America/Denver (MT)</option>
-                        <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
-                        <option value="UTC">UTC</option>
                       </select>
                     </div>
                     <Button type="submit" disabled={isSavingCutoff}>

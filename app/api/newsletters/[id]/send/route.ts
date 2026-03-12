@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { buildAndSendIssue, computeCutoffWindow } from "@/lib/server/newsletter-send"
+import { addDaysToYmd, buildAndSendIssue, computeCutoffWindow } from "@/lib/server/newsletter-send"
 
 export const runtime = "nodejs"
 
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const newsletterId = params.id
   const { data: newsletter, error: newsletterError } = await supabase
     .from("newsletters")
-    .select("id,title,owner_id,cutoff_day,cutoff_time,cutoff_tz")
+    .select("id,title,owner_id,cutoff_day,cutoff_time,cutoff_tz,current_week_start")
     .eq("id", newsletterId)
     .single()
 
@@ -47,7 +47,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: "Only the owner can send." }, { status: 403 })
   }
 
-  const { weekStartValue } = computeCutoffWindow(newsletter)
+  const { weekStartValue: fallbackWeekStart } = computeCutoffWindow(newsletter)
+  const weekStartValue = newsletter.current_week_start ?? fallbackWeekStart
 
   const existingIssue = await supabase
     .from("issues")
@@ -106,6 +107,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
+
+  const nextWeekStart = addDaysToYmd(weekStartValue, 7)
+  await supabase.from("newsletters").update({ current_week_start: nextWeekStart }).eq("id", newsletter.id)
 
   return NextResponse.json({ ok: true })
 }

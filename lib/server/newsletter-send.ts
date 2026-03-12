@@ -7,6 +7,7 @@ type NewsletterRow = {
   cutoff_day: number
   cutoff_time: string
   cutoff_tz: string
+  current_week_start: string | null
 }
 
 const weekdayIndex: Record<string, number> = {
@@ -18,6 +19,9 @@ const weekdayIndex: Record<string, number> = {
   Fri: 5,
   Sat: 6,
 }
+
+const DEFAULT_CUTOFF_TIME = "00:00"
+const DEFAULT_CUTOFF_TZ = "America/Los_Angeles"
 
 const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -88,14 +92,27 @@ const parseCutoffTime = (timeValue: string) => {
   }
 }
 
+export const addDaysToYmd = (value: string, days: number) => {
+  const [yearRaw, monthRaw, dayRaw] = value.split("-")
+  const year = Number.parseInt(yearRaw, 10)
+  const month = Number.parseInt(monthRaw, 10)
+  const day = Number.parseInt(dayRaw, 10)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() + days)
+  const nextYear = date.getUTCFullYear()
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, "0")
+  const nextDay = String(date.getUTCDate()).padStart(2, "0")
+  return `${nextYear}-${nextMonth}-${nextDay}`
+}
+
 export const computeCutoffWindow = (newsletter: NewsletterRow) => {
   const now = new Date()
-  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, newsletter.cutoff_tz)
-  const cutoffTime = parseCutoffTime(newsletter.cutoff_time)
+  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, DEFAULT_CUTOFF_TZ)
+  const cutoffTime = parseCutoffTime(DEFAULT_CUTOFF_TIME)
   const daysSinceCutoff = (weekday - newsletter.cutoff_day + 7) % 7
   let cutoffDate = makeZonedDate(
     { year, month, day, hour: cutoffTime.hour, minute: cutoffTime.minute, second: cutoffTime.second },
-    newsletter.cutoff_tz
+    DEFAULT_CUTOFF_TZ
   )
   cutoffDate.setUTCDate(cutoffDate.getUTCDate() - daysSinceCutoff)
 
@@ -112,7 +129,7 @@ export const computeCutoffWindow = (newsletter: NewsletterRow) => {
   editDeadline.setUTCDate(editDeadline.getUTCDate() + 7)
 
   return {
-    weekStartValue: formatDateYmd(weekStart, newsletter.cutoff_tz),
+    weekStartValue: formatDateYmd(weekStart, DEFAULT_CUTOFF_TZ),
     lastCutoff: weekStart,
     editDeadline,
   }

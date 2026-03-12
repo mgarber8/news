@@ -18,6 +18,7 @@ type Newsletter = {
   cutoff_day: number
   cutoff_time: string
   cutoff_tz: string
+  current_week_start: string | null
 }
 
 type Submission = {
@@ -50,6 +51,9 @@ const weekdayIndex: Record<string, number> = {
   Fri: 5,
   Sat: 6,
 }
+
+const DEFAULT_CUTOFF_TIME = "00:00"
+const DEFAULT_CUTOFF_TZ = "America/Los_Angeles"
 
 const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -123,15 +127,29 @@ const parseCutoffTime = (timeValue: string) => {
   }
 }
 
+const parseYmd = (value: string) => {
+  const [yearRaw, monthRaw, dayRaw] = value.split("-")
+  return {
+    year: Number.parseInt(yearRaw, 10),
+    month: Number.parseInt(monthRaw, 10),
+    day: Number.parseInt(dayRaw, 10),
+  }
+}
+
+const makeWeekStartDate = (value: string) => {
+  const { year, month, day } = parseYmd(value)
+  return makeZonedDate({ year, month, day, hour: 0, minute: 0, second: 0 }, DEFAULT_CUTOFF_TZ)
+}
+
 const computeCutoffWindow = (newsletter: Newsletter) => {
   const now = new Date()
-  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, newsletter.cutoff_tz)
-  const cutoffTime = parseCutoffTime(newsletter.cutoff_time)
+  const { year, month, day, hour, minute, second, weekday } = getZonedParts(now, DEFAULT_CUTOFF_TZ)
+  const cutoffTime = parseCutoffTime(DEFAULT_CUTOFF_TIME)
   const daysSinceCutoff = (weekday - newsletter.cutoff_day + 7) % 7
   let cutoffDate = new Date(Date.UTC(year, month - 1, day, cutoffTime.hour, cutoffTime.minute, cutoffTime.second))
   cutoffDate = makeZonedDate(
     { year, month, day, hour: cutoffTime.hour, minute: cutoffTime.minute, second: cutoffTime.second },
-    newsletter.cutoff_tz
+    DEFAULT_CUTOFF_TZ
   )
   cutoffDate.setUTCDate(cutoffDate.getUTCDate() - daysSinceCutoff)
 
@@ -149,7 +167,7 @@ const computeCutoffWindow = (newsletter: Newsletter) => {
 
   return {
     weekStart,
-    weekStartValue: formatDateYmd(weekStart, newsletter.cutoff_tz),
+    weekStartValue: formatDateYmd(weekStart, DEFAULT_CUTOFF_TZ),
     editDeadline,
     canEdit: now < editDeadline,
   }
@@ -201,7 +219,7 @@ export default function NewsletterEditPage() {
 
       const newsletterRes = await supabase
         .from("newsletters")
-        .select("id,title,description,cutoff_day,cutoff_time,cutoff_tz")
+        .select("id,title,description,cutoff_day,cutoff_time,cutoff_tz,current_week_start")
         .eq("id", newsletterId)
         .single()
 
@@ -213,9 +231,16 @@ export default function NewsletterEditPage() {
 
       setNewsletter(newsletterRes.data)
       const cutoffWindow = computeCutoffWindow(newsletterRes.data)
-      setWeekStartValue(cutoffWindow.weekStartValue)
-      setEditDeadline(cutoffWindow.editDeadline)
-      setCanEdit(cutoffWindow.canEdit)
+      const resolvedWeekStart = newsletterRes.data.current_week_start ?? cutoffWindow.weekStartValue
+      const resolvedWeekStartDate = newsletterRes.data.current_week_start
+        ? makeWeekStartDate(newsletterRes.data.current_week_start)
+        : cutoffWindow.weekStart
+      const resolvedDeadline = new Date(resolvedWeekStartDate.getTime())
+      resolvedDeadline.setUTCDate(resolvedDeadline.getUTCDate() + 7)
+
+      setWeekStartValue(resolvedWeekStart)
+      setEditDeadline(resolvedDeadline)
+      setCanEdit(new Date() < resolvedDeadline)
 
       const questionRes = await supabase
         .from("newsletter_questions")
@@ -236,7 +261,7 @@ export default function NewsletterEditPage() {
         .select("id,week_start,ai_summary")
         .eq("newsletter_id", newsletterId)
         .eq("user_id", authData.user.id)
-        .eq("week_start", cutoffWindow.weekStartValue)
+        .eq("week_start", resolvedWeekStart)
         .maybeSingle()
 
       if (submissionRes.error) {
@@ -248,6 +273,17 @@ export default function NewsletterEditPage() {
       if (submissionRes.data) {
         setSubmission(submissionRes.data)
         setAiSummary(submissionRes.data.ai_summary ?? "")
+
+        if (!newsletterRes.data.current_week_start) {
+          const { error: weekStartError } = await supabase
+            .from("newsletters")
+            .update({ current_week_start: resolvedWeekStart })
+            .eq("id", newsletterRes.data.id)
+
+          if (!weekStartError) {
+            setNewsletter((prev) => (prev ? { ...prev, current_week_start: resolvedWeekStart } : prev))
+          }
+        }
 
         const answerRes = await supabase
           .from("submission_answers")
@@ -332,6 +368,21 @@ export default function NewsletterEditPage() {
       setError(upsertError?.message || "Failed to save submission.")
       setIsSaving(false)
       return
+    }
+
+    if (newsletter && !newsletter.current_week_start) {
+      const { error: weekStartError } = await supabase
+        .from("newsletters")
+        .update({ current_week_start: weekStartValue })
+        .eq("id", newsletter.id)
+
+      if (weekStartError) {
+        setError(weekStartError.message)
+        setIsSaving(false)
+        return
+      }
+
+      setNewsletter((prev) => (prev ? { ...prev, current_week_start: weekStartValue } : prev))
     }
 
     if (questions.length > 0) {
@@ -517,10 +568,7 @@ export default function NewsletterEditPage() {
             <CardTitle>This Week&apos;s Update</CardTitle>
             <CardDescription>
               {weekStartValue && editDeadline
-                ? `Week of ${weekStartValue}. You can edit until ${formatDateTime(
-                    editDeadline,
-                    newsletter.cutoff_tz
-                  )}.`
+                ? `Week of ${weekStartValue}. You can edit until ${formatDateTime(editDeadline, DEFAULT_CUTOFF_TZ)}.`
                 : "Loading deadline..."}
             </CardDescription>
           </CardHeader>

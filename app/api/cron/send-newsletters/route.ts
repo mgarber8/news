@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { buildAndSendIssue, computeCutoffWindow } from "@/lib/server/newsletter-send"
+import { addDaysToYmd, buildAndSendIssue, computeCutoffWindow } from "@/lib/server/newsletter-send"
 
 export const runtime = "nodejs"
 
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
   const { data: newsletters, error: newsletterError } = await supabase
     .from("newsletters")
-    .select("id,title,owner_id,cutoff_day,cutoff_time,cutoff_tz")
+    .select("id,title,owner_id,cutoff_day,cutoff_time,cutoff_tz,current_week_start")
 
   if (newsletterError) {
     return NextResponse.json({ error: newsletterError.message }, { status: 500 })
@@ -41,27 +41,8 @@ export async function GET(request: Request) {
   const now = new Date()
 
   for (const newsletter of newsletters ?? []) {
-    const { lastCutoff } = computeCutoffWindow(newsletter)
-    const sendWeekStart = new Date(lastCutoff.getTime())
-    sendWeekStart.setUTCDate(sendWeekStart.getUTCDate() - 7)
-    const sendWeekStartValue = new Intl.DateTimeFormat("en-US", {
-      timeZone: newsletter.cutoff_tz,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-      .formatToParts(sendWeekStart)
-      .reduce(
-        (acc, part) => {
-          if (part.type === "year") acc.year = part.value
-          if (part.type === "month") acc.month = part.value
-          if (part.type === "day") acc.day = part.value
-          return acc
-        },
-        { year: "", month: "", day: "" }
-      )
-
-    const sendWeekStartKey = `${sendWeekStartValue.year}-${sendWeekStartValue.month}-${sendWeekStartValue.day}`
+    const { lastCutoff, weekStartValue: fallbackWeekStart } = computeCutoffWindow(newsletter)
+    const sendWeekStartKey = newsletter.current_week_start ?? fallbackWeekStart
 
     if (now < lastCutoff) {
       results.push({
@@ -152,6 +133,8 @@ export async function GET(request: Request) {
         resendFrom,
         recipients,
       })
+      const nextWeekStart = addDaysToYmd(sendWeekStartKey, 7)
+      await supabase.from("newsletters").update({ current_week_start: nextWeekStart }).eq("id", newsletter.id)
       results.push({
         id: newsletter.id,
         status: "sent",
