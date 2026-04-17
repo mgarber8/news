@@ -104,7 +104,7 @@ const formatDateYmd = (date: Date, timeZone: string) => {
 }
 
 const DEFAULT_CUTOFF_TIME = "00:00"
-const DEFAULT_CUTOFF_TZ = "America/Los_Angeles"
+const DEFAULT_CUTOFF_TZ = "America/New_York"
 
 const parseCutoffTime = (timeValue: string) => {
   const [hourRaw, minuteRaw = "0", secondRaw = "0"] = timeValue.split(":")
@@ -373,6 +373,7 @@ export default function NewsletterDashboardPage() {
         cutoff_day: cutoffDay,
         cutoff_time: "00:00:00",
         cutoff_tz: DEFAULT_CUTOFF_TZ,
+        current_week_start: null,
       })
       .eq("id", newsletter.id)
 
@@ -382,9 +383,9 @@ export default function NewsletterDashboardPage() {
       return
     }
 
-    setWeekStartValue((prev) =>
-      newsletter?.current_week_start ? newsletter.current_week_start : computeWeekStartValue(cutoffDay)
-    )
+    setNewsletter((prev) => (prev ? { ...prev, cutoff_day: cutoffDay, current_week_start: null } : prev))
+    const newWeekStart = computeWeekStartValue(cutoffDay)
+    setWeekStartValue(newWeekStart)
     setHasSubmission(false)
     setIsSavingCutoff(false)
   }

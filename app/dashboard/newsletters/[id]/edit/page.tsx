@@ -53,7 +53,7 @@ const weekdayIndex: Record<string, number> = {
 }
 
 const DEFAULT_CUTOFF_TIME = "00:00"
-const DEFAULT_CUTOFF_TZ = "America/Los_Angeles"
+const DEFAULT_CUTOFF_TZ = "America/New_York"
 
 const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
