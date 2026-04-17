@@ -128,9 +128,31 @@ export const computeCutoffWindow = (newsletter: NewsletterRow) => {
   const editDeadline = new Date(weekStart.getTime())
   editDeadline.setUTCDate(editDeadline.getUTCDate() + 7)
 
+  // If current_week_start is set and its deadline is later than the computed cutoff,
+  // delay sending until that deadline so cutoff day changes don't trigger premature sends.
+  let lastCutoff = weekStart
+  if (newsletter.current_week_start) {
+    const [wsYearRaw, wsMonthRaw, wsDayRaw] = newsletter.current_week_start.split("-")
+    const wsDeadline = makeZonedDate(
+      {
+        year: Number.parseInt(wsYearRaw, 10),
+        month: Number.parseInt(wsMonthRaw, 10),
+        day: Number.parseInt(wsDayRaw, 10),
+        hour: 0,
+        minute: 0,
+        second: 0,
+      },
+      DEFAULT_CUTOFF_TZ
+    )
+    wsDeadline.setUTCDate(wsDeadline.getUTCDate() + 7)
+    if (wsDeadline > lastCutoff) {
+      lastCutoff = wsDeadline
+    }
+  }
+
   return {
     weekStartValue: formatDateYmd(weekStart, DEFAULT_CUTOFF_TZ),
-    lastCutoff: weekStart,
+    lastCutoff,
     editDeadline,
   }
 }
