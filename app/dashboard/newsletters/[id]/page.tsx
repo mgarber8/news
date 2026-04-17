@@ -382,6 +382,32 @@ export default function NewsletterDashboardPage() {
 
     // Migrate existing submissions to the new week_start so no member updates are lost
     if (oldWeekStart && oldWeekStart !== newWeekStart) {
+      // Find users who already have a submission at newWeekStart — those would cause a unique conflict
+      const { data: alreadyAtNew } = await supabase
+        .from("submissions")
+        .select("user_id")
+        .eq("newsletter_id", newsletterId)
+        .eq("week_start", newWeekStart)
+
+      const conflictingUserIds = (alreadyAtNew ?? []).map((r) => r.user_id)
+
+      // Delete the old submissions for conflicting users (they already have one at the new key)
+      if (conflictingUserIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("submissions")
+          .delete()
+          .eq("newsletter_id", newsletterId)
+          .eq("week_start", oldWeekStart)
+          .in("user_id", conflictingUserIds)
+
+        if (deleteError) {
+          setError(deleteError.message)
+          setIsSavingCutoff(false)
+          return
+        }
+      }
+
+      // Migrate remaining old submissions — no conflicts remain
       const { error: migrateError } = await supabase
         .from("submissions")
         .update({ week_start: newWeekStart })
@@ -622,7 +648,7 @@ export default function NewsletterDashboardPage() {
                     <Clock className="mr-2 h-5 w-5" />
                     Cutoff Settings
                   </CardTitle>
-                <CardDescription>Cutoff is midnight Pacific time.</CardDescription>
+                <CardDescription>Cutoff is midnight Eastern time.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleCutoffSave} className="space-y-4">
