@@ -370,7 +370,8 @@ export default function NewsletterDashboardPage() {
     // Compute next occurrence of cutoffDay from today (today = 0 days, tomorrow = 1, etc.)
     const now = new Date()
     const { year, month, day, weekday } = getZonedParts(now, DEFAULT_CUTOFF_TZ)
-    const daysUntil = (cutoffDay - weekday + 7) % 7
+    let daysUntil = (cutoffDay - weekday + 7) % 7
+    if (daysUntil === 0) daysUntil = 7 // today's midnight already passed, always go to next occurrence
     const nextCutoff = makeZonedDate({ year, month, day, hour: 12, minute: 0, second: 0 }, DEFAULT_CUTOFF_TZ)
     nextCutoff.setUTCDate(nextCutoff.getUTCDate() + daysUntil)
     // week_start is anchored one week before the next cutoff date
