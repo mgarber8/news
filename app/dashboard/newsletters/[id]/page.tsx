@@ -367,15 +367,32 @@ export default function NewsletterDashboardPage() {
     setIsSavingCutoff(true)
     setError("")
 
-    // Compute the next future occurrence of cutoffDay (always >= 1 day away)
+    // Compute next occurrence of cutoffDay from today (today = 0 days, tomorrow = 1, etc.)
     const now = new Date()
     const { year, month, day, weekday } = getZonedParts(now, DEFAULT_CUTOFF_TZ)
     const daysUntil = (cutoffDay - weekday + 7) % 7
     const nextCutoff = makeZonedDate({ year, month, day, hour: 12, minute: 0, second: 0 }, DEFAULT_CUTOFF_TZ)
     nextCutoff.setUTCDate(nextCutoff.getUTCDate() + daysUntil)
-    // week_start is the anchor a week before the next cutoff
+    // week_start is anchored one week before the next cutoff date
     nextCutoff.setUTCDate(nextCutoff.getUTCDate() - 7)
     const newWeekStart = formatDateYmd(nextCutoff, DEFAULT_CUTOFF_TZ)
+
+    const oldWeekStart = newsletter.current_week_start
+
+    // Migrate existing submissions to the new week_start so no member updates are lost
+    if (oldWeekStart && oldWeekStart !== newWeekStart) {
+      const { error: migrateError } = await supabase
+        .from("submissions")
+        .update({ week_start: newWeekStart })
+        .eq("newsletter_id", newsletterId)
+        .eq("week_start", oldWeekStart)
+
+      if (migrateError) {
+        setError(migrateError.message)
+        setIsSavingCutoff(false)
+        return
+      }
+    }
 
     const { error: updateError } = await supabase
       .from("newsletters")
@@ -395,7 +412,6 @@ export default function NewsletterDashboardPage() {
 
     setNewsletter((prev) => (prev ? { ...prev, cutoff_day: cutoffDay, current_week_start: newWeekStart } : prev))
     setWeekStartValue(newWeekStart)
-    setHasSubmission(false)
     setIsSavingCutoff(false)
   }
 
